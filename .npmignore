@@ -1,0 +1,5 @@
+# `files` in package.json already bounds the published set; this file only
+# guards against a future `files` edit accidentally shipping dev leftovers.
+.gitignore
+.DS_Store
+*.log

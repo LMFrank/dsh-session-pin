@@ -1,0 +1,55 @@
+{
+  "name": "dsh-session-pin",
+  "version": "0.1.0",
+  "description": "Pin DeepSeek Harness sessions into a dedicated group at the top of the sidebar (Codex-style). Host half persists the pinned set; client half injects the group into the sidebar shell.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./client/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "client",
+    "cordis.patch.yml",
+    "README.md",
+    "README.zh.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "deepseek-harness-plugin",
+    "sidebar",
+    "pin",
+    "pinned",
+    "session",
+    "cordis"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LMFrank/dsh-session-pin.git"
+  },
+  "bugs": {
+    "url": "https://github.com/LMFrank/dsh-session-pin/issues"
+  },
+  "homepage": "https://github.com/LMFrank/dsh-session-pin#readme",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots"
+      ],
+      "platform": "web"
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,7 @@
+node_modules/
+*.log
+.DS_Store
+
+# Per-machine runtime state (never commit: it duplicates the host registry
+# and can carry another machine's session ids).
+dsh-session-pin.json

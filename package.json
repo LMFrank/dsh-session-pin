@@ -1,7 +1,7 @@
 {
   "name": "dsh-session-pin",
-  "version": "0.1.0",
-  "description": "Pin DeepSeek Harness sessions into a dedicated group at the top of the sidebar (Codex-style). Host half persists the pinned set; client half injects the group into the sidebar shell.",
+  "version": "0.2.0",
+  "description": "Pin DeepSeek Harness sessions into a dedicated group at the top of the sidebar (Codex-style), with live status indicators. Host half persists the pinned set; client half injects the group into the sidebar shell.",
   "type": "module",
   "main": "lib/index.js",
   "exports": {

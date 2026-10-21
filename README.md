@@ -15,6 +15,21 @@ Pin DeepSeek Harness sessions into a dedicated group at the top of the sidebar, 
 
 Labels follow the document language: Chinese when the UI language is Chinese, English otherwise.
 
+### Status dots
+
+Each pinned row carries the same primary status indicator as a native row, so a pinned session never hides that it is busy:
+
+| Indicator | Meaning |
+| --- | --- |
+| Spinning ring | The agent is working on a turn |
+| Amber dot | The session waits for you — approval, plan review, or a question |
+| Green dot | Finished while you were not looking |
+| *(nothing)* | Idle |
+
+Precedence matches the native rows: a pending interaction outranks activity. The group repaints on both stores — the session list (the `running` bit) and the pending-interaction store — so the indicator appears and clears on its own.
+
+The spinner reproduces the shell's own status dot (same `data-state` contract, same track/arc geometry, same 1.5 s rotation, and it stops under `prefers-reduced-motion`); the primitive package is not a runtime-resolvable dependency for third-party plugins, so the shape is rebuilt locally rather than imported.
+
 The pinned set is persisted in `<DSH_HOME>/dsh-session-pin.json` (default `~/.dsh/dsh-session-pin.json`), so it survives restarts and profile reloads.
 
 ## How it works

@@ -76,6 +76,81 @@ window.__ModuleLoader__.load({
       return zh() ? `${days} 天` : `${days}d`
     }
 
+    /**
+     * Primary status of one pinned row, mirroring the native row's precedence:
+     * a pending interaction outranks activity, activity outranks the green
+     * "finished while you were away" reminder, and everything else is idle.
+     *
+     * The native row also surfaces `runningSubagentCount`; the pinned row keeps
+     * only the primary status so the group stays one glance wide.
+     * @param {object} summary - a session list row.
+     * @param {{ kind?: string } | undefined} interaction - its pending interaction.
+     * @returns {'ongoing' | 'warning' | 'done'}
+     */
+    function rowState(summary, interaction) {
+      const kind = interaction?.kind
+      if (kind === 'approval' || kind === 'plan-review' || kind === 'question') return 'warning'
+      if (summary?.running === true) return 'ongoing'
+      if (summary?.completed === true) return 'done'
+      return 'idle'
+    }
+
+    /**
+     * Build the status element for one row: a spinning SVG while the agent
+     * runs, a static dot otherwise.
+     *
+     * This reproduces the shape the shell's own status dot renders (same
+     * `data-state` contract, same track/arc geometry, same 1.5s spin) because
+     * the primitive package is not a runtime-resolvable dependency here — only
+     * the shell's own bundles may import it. Styling lives in injectStyles().
+     * @param {string} state - `ongoing`, `warning`, `done`, or `idle`.
+     * @returns {HTMLElement} the status element.
+     */
+    function statusDot(state) {
+      if (state === 'ongoing') {
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+        svg.setAttribute('class', 'dsh-spin-status dsh-spin-status-spin')
+        svg.setAttribute('data-state', 'ongoing')
+        svg.setAttribute('width', '14')
+        svg.setAttribute('height', '14')
+        svg.setAttribute('viewBox', '0 0 24 24')
+        svg.setAttribute('aria-hidden', 'true')
+        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+        group.setAttribute('class', 'dsh-spin-status-motion')
+        const track = document.createElementNS('http://www.w3.org/2000/svg', 'circle')
+        track.setAttribute('class', 'dsh-spin-status-track')
+        track.setAttribute('cx', '12')
+        track.setAttribute('cy', '12')
+        track.setAttribute('r', '9.5')
+        const arc = document.createElementNS('http://www.w3.org/2000/svg', 'circle')
+        arc.setAttribute('class', 'dsh-spin-status-arc')
+        arc.setAttribute('cx', '12')
+        arc.setAttribute('cy', '12')
+        arc.setAttribute('r', '9.5')
+        group.append(track, arc)
+        svg.append(group)
+        return svg
+      }
+      const dot = document.createElement('span')
+      dot.className = 'dsh-spin-status'
+      dot.setAttribute('data-state', state)
+      dot.setAttribute('aria-hidden', 'true')
+      return dot
+    }
+
+    /** Injective label for one state, used as the row's accessible status text. */
+    function statusLabel(state) {
+      const table = {
+        ongoing: ['任务进行中', 'Working'],
+        warning: ['等待你处理', 'Waiting for you'],
+        done: ['已完成', 'Finished'],
+        idle: ['空闲', 'Idle'],
+      }
+      const entry = table[state]
+      if (entry === undefined) return state
+      return zh() ? entry[0] : entry[1]
+    }
+
     /** Inject the stylesheet once (idempotent across HMR reloads). */
     function injectStyles() {
       const id = 'dsh-session-pin/styles'
@@ -84,7 +159,7 @@ window.__ModuleLoader__.load({
       style.dataset.plugin = 'dsh-session-pin'
       style.dataset.pluginCss = id
       style.textContent = `
-.dsh-spin{box-sizing:border-box;flex:none;display:flex;flex-direction:column;gap:2px;padding:0 2px;margin-bottom:6px;font-size:14px;color:var(--dsw-alias-label-primary)}
+.dsh-spin{box-sizing:border-box;flex:none;display:flex;flex-direction:column;gap:2px;padding:0;margin-bottom:6px;font-size:14px;color:var(--dsw-alias-label-primary)}
 .dsh-spin[data-collapsed="true"] .dsh-spin-list{display:none}
 .dsh-spin-header{box-sizing:border-box;display:flex;align-items:center;gap:6px;height:28px;padding:0 6px;border-radius:8px;background:0 0;border:none;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;line-height:20px;cursor:pointer;text-align:left;width:100%}
 .dsh-spin-header:hover{background:var(--dsw-alias-interactive-bg-hover)}
@@ -93,9 +168,24 @@ window.__ModuleLoader__.load({
 .dsh-spin-heading{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:.02em}
 .dsh-spin-count{flex:none;color:var(--dsw-alias-label-tertiary);font-size:11px;font-variant-numeric:tabular-nums}
 .dsh-spin-list{display:flex;flex-direction:column;gap:0}
-.dsh-spin-row{box-sizing:border-box;display:flex;align-items:center;gap:6px;height:32px;padding:0 8px 0 14px;border-radius:8px;cursor:pointer;color:var(--dsw-alias-label-primary);user-select:none}
+.dsh-spin-row{box-sizing:border-box;display:flex;align-items:center;gap:0;height:32px;padding:0 8px;border-radius:8px;cursor:pointer;color:var(--dsw-alias-label-primary);user-select:none}
 .dsh-spin-row:hover,.dsh-spin-row.dsh-spin-selected{background:var(--dsw-alias-interactive-bg-hover)}
-.dsh-spin-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;line-height:20px}
+.dsh-spin-slot{flex:none;display:inline-flex;align-items:center;justify-content:center;width:16px;height:20px;color:var(--dsw-alias-label-tertiary)}
+.dsh-spin-status{position:relative;display:inline-block;flex:none;width:10px;height:10px}
+.dsh-spin-status:after{content:"";position:absolute;inset:20%;border-radius:50%;background:currentColor}
+.dsh-spin-status[data-state="done"]{color:var(--dsw-alias-state-success-primary)}
+.dsh-spin-status[data-state="warning"]{color:var(--dsw-alias-state-warn-primary)}
+.dsh-spin-status[data-state="idle"]{color:var(--dsw-alias-state-idle-primary)}
+.dsh-spin-status-spin{color:var(--dsw-alias-label-tertiary)}
+.dsh-spin-status-spin:after{content:none}
+.dsh-spin-status-motion{transform-origin:center;animation:dsh-spin-status-spin 1.5s linear infinite}
+.dsh-spin-status-track,.dsh-spin-status-arc{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+.dsh-spin-status-track{opacity:.25}
+.dsh-spin-status-arc{stroke-dasharray:12 150;animation:dsh-spin-status-dash 1.5s ease-in-out infinite}
+@keyframes dsh-spin-status-spin{to{transform:rotate(360deg)}}
+@keyframes dsh-spin-status-dash{0%{stroke-dasharray:12 150;stroke-dashoffset:0}50%{stroke-dasharray:24 150;stroke-dashoffset:-6}to{stroke-dasharray:12 150;stroke-dashoffset:0}}
+@media (prefers-reduced-motion:reduce){.dsh-spin-status-motion,.dsh-spin-status-arc{animation:none}.dsh-spin-status-arc{stroke-dasharray:18 150;stroke-dashoffset:-3}}
+.dsh-spin-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;line-height:20px;margin:0 6px 0 4px}
 .dsh-spin-time{flex:none;font-size:12px;line-height:20px;color:var(--dsw-alias-label-tertiary)}
 .dsh-spin-row:hover .dsh-spin-time{display:none}
 .dsh-spin-unpin{flex:none;display:none;align-items:center;justify-content:center;width:20px;height:20px;padding:0;border:none;border-radius:4px;background:0 0;color:var(--dsw-alias-label-tertiary);cursor:pointer;font-size:13px;line-height:1}
@@ -193,6 +283,21 @@ window.__ModuleLoader__.load({
       /** Currently open context menu, if any. */
       let menu = null
 
+      /**
+       * Read the runtime pending-interaction store (lazily; it may mount late).
+       *
+       * The native row derives its status dot from this store plus the list's
+       * `running` bit; without it a pinned row cannot tell "waiting for you"
+       * from "still working".
+       */
+      const pendingService = () => {
+        try {
+          return ctx.get?.('uiSession')?.pendingInteractions
+        } catch {
+          return undefined
+        }
+      }
+
       /** Read the runtime session list snapshot (lazily; services may mount late). */
       const sessionsService = () => {
         try {
@@ -225,7 +330,11 @@ window.__ModuleLoader__.load({
       /**
        * Resolve pinned ids to live rows, dropping ids the list no longer knows
        * (deleted sessions stay in the durable file on purpose).
-       * @returns {Array<{ id: string, title: string, updatedAt: number, blank: boolean }>}
+       *
+       * `state` mirrors the native row's primary status dot: a pending
+       * interaction outranks activity (the session waits for *you*), `running`
+       * means the agent is working, and `completed` is the finished reminder.
+       * @returns {Array<{ id: string, title: string, updatedAt: number, blank: boolean, selected: boolean, state: string }>}
        */
       const resolveRows = () => {
         const sessions = sessionsService()
@@ -238,6 +347,12 @@ window.__ModuleLoader__.load({
         }
         const byId = snapshot?.byId ?? {}
         const current = snapshot?.current
+        let pending
+        try {
+          pending = pendingService()?.getSnapshot()
+        } catch {
+          pending = undefined
+        }
         const rows = []
         for (const id of pinned) {
           const summary = byId[id]
@@ -250,6 +365,7 @@ window.__ModuleLoader__.load({
             updatedAt: summary.updatedAt,
             blank: summary.blank === true,
             selected: current === id,
+            state: rowState(summary, pending?.get?.(id)),
           })
         }
         return rows
@@ -365,10 +481,16 @@ window.__ModuleLoader__.load({
           element.setAttribute(ROW_ATTR, row.id)
           element.setAttribute('aria-selected', row.selected === true ? 'true' : 'false')
           element.title = row.title
+          const slot = document.createElement('span')
+          slot.className = 'dsh-spin-slot'
+          if (row.state !== 'idle') {
+            slot.append(statusDot(row.state))
+            slot.title = statusLabel(row.state)
+          }
           const title = document.createElement('span')
           title.className = 'dsh-spin-title'
           title.textContent = row.title
-          element.append(title)
+          element.append(slot, title)
           if (row.blank !== true) {
             const time = document.createElement('span')
             time.className = 'dsh-spin-time'
@@ -438,28 +560,50 @@ window.__ModuleLoader__.load({
         section.style.display = isRail ? 'none' : ''
       }
 
-      /** Probe for the sessions service; re-render once it appears. */
+      /**
+       * Probe for the sessions service and the pending-interaction store;
+       * re-render once either appears.
+       *
+       * Both subscriptions matter: `running` rides the list store, while a
+       * pending approval / plan review / question arrives on the interaction
+       * store — a pinned row must repaint when either side changes.
+       */
       let subscribedStore = null
       let unsubscribeStore = null
+      let subscribedPending = null
+      let unsubscribePending = null
       const bindSessions = () => {
         const sessions = sessionsService()
         if (sessions === undefined) return false
         const store = sessions.list
         if (store !== subscribedStore && typeof store?.subscribe === 'function') {
-          if (typeof unsubscribeStore === 'function') {
-            try {
-              unsubscribeStore()
-            } catch {
-              // Already detached by the service owner; nothing to undo.
-            }
-          }
+          unsubscribeQuietly(unsubscribeStore)
           subscribedStore = store
           unsubscribeStore = store.subscribe(() => {
             render()
             syncSelection()
           })
         }
+        const pending = pendingService()
+        if (pending !== undefined && pending !== subscribedPending && typeof pending.subscribe === 'function') {
+          unsubscribeQuietly(unsubscribePending)
+          subscribedPending = pending
+          unsubscribePending = pending.subscribe(() => {
+            render()
+            syncSelection()
+          })
+        }
         return true
+      }
+
+      /** Detach one store listener, tolerating an owner that already tore it down. */
+      const unsubscribeQuietly = (unsubscribe) => {
+        if (typeof unsubscribe !== 'function') return
+        try {
+          unsubscribe()
+        } catch {
+          // Already detached by the service owner; nothing to undo.
+        }
       }
 
       /** Keep the pinned row highlight aligned with the current session. */
@@ -579,13 +723,8 @@ window.__ModuleLoader__.load({
         rootObserver.disconnect()
         document.removeEventListener('contextmenu', onContextMenu, true)
         closeMenu()
-        if (typeof unsubscribeStore === 'function') {
-          try {
-            unsubscribeStore()
-          } catch {
-            // Service already disposed: its listeners went with it.
-          }
-        }
+        unsubscribeQuietly(unsubscribeStore)
+        unsubscribeQuietly(unsubscribePending)
         section.remove()
       }, 'dsh-session-pin: sidebar section')
     }
